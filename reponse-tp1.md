@@ -37,4 +37,4 @@ Le jeu 4 a **4 tournois** (`/api/games/4/tournaments`) :
 | Endpoint | Code | Détail |
 |---|---|---|
 | /api/broken | 500 Internal Server Error | `{"error": "panne simulée"}` |
-| /api/slow | 200 OK | réponse correcte (12 jeux) mais lente : X secondes |
+| /api/slow | 200 OK | réponse correcte (12 jeux) mais lente : X secondes | (pas réussi a trouver le temps que met le serveur a répondre car il ne répondais plus après plusieurs requêtes)
