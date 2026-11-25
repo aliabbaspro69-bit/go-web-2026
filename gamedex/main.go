@@ -1,79 +1,122 @@
 package main
 
 import (
+	"bytes"
+	"errors"
 	"flag"
-	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"strconv"
+
+	"gamedex/internal/api"
 )
 
-// Petite "base de données" en mémoire : l'id d'un jeu = sa position + 1.
-var jeux = []string{
-	"The Legend of Zelda: Breath of the Wild",
-	"Celeste",
-	"Hollow Knight",
-	"Mario Kart 8 Deluxe",
-	"Rocket League",
+var tpl *template.Template
+
+// PageData : les données passées aux templates.
+type PageData struct {
+	Title       string
+	Query       string
+	Games       []api.Game
+	Game        *api.Game
+	Tournaments []api.Tournament
+	Status      int
+	Message     string
 }
 
 func main() {
 	port := flag.Int("port", 8080, "port d'écoute du serveur")
 	flag.Parse()
 
-	mux := http.NewServeMux()
+	var err error
+	tpl, err = template.ParseGlob("templates/*.html")
+	if err != nil {
+		log.Fatalf("templates introuvables (lancez le programme depuis le dossier gamedex) : %v", err)
+	}
 
-	// "{$}" = uniquement "/" (sinon "/" attrape toutes les URL inconnues)
+	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", accueil)
 	mux.HandleFunc("GET /jeux", listeJeux)
 	mux.HandleFunc("GET /jeux/{id}", detailJeu)
+	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+	mux.HandleFunc("/", pageIntrouvable) // toute autre URL : page d'erreur 404
 
-	// Fichiers statiques : /static/css/style.css -> ./static/css/style.css
-	fichiers := http.FileServer(http.Dir("static"))
-	mux.Handle("GET /static/", http.StripPrefix("/static/", fichiers))
-
-	addr := fmt.Sprintf(":%d", *port)
+	addr := ":" + strconv.Itoa(*port)
 	log.Printf("GameDex démarre sur http://localhost%s", addr)
 	log.Fatal(http.ListenAndServe(addr, mux))
 }
 
-// GET / : page HTML qui utilise le CSS (bonus)
-func accueil(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, `<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="utf-8">
-  <title>GameDex</title>
-  <link rel="stylesheet" href="/static/css/style.css">
-</head>
-<body>
-  <h1>Bienvenue sur GameDex</h1>
-  <p>Votre encyclopédie de jeux vidéo.</p>
-  <p><a href="/jeux">Voir la liste des jeux</a></p>
-</body>
-</html>`)
-}
-
-// GET /jeux : liste en texte brut
-func listeJeux(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	for i, nom := range jeux {
-		fmt.Fprintf(w, "%d. %s\n", i+1, nom)
+// render exécute le template dans un buffer avant d'écrire : en cas d'erreur
+// de template, on peut encore renvoyer un vrai 500 propre.
+func render(w http.ResponseWriter, status int, name string, data PageData) {
+	var buf bytes.Buffer
+	if err := tpl.ExecuteTemplate(&buf, name, data); err != nil {
+		log.Printf("erreur de template %s : %v", name, err)
+		http.Error(w, "erreur interne", http.StatusInternalServerError)
+		return
 	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	buf.WriteTo(w)
 }
 
-// GET /jeux/{id} : 400 si l'id n'est pas un nombre, 404 si le jeu n'existe pas
+func erreur(w http.ResponseWriter, status int, message string) {
+	render(w, status, "erreur.html", PageData{Title: "Erreur", Status: status, Message: message})
+}
+
+// erreurAPI transforme une erreur du client API en page d'erreur avec le bon code.
+func erreurAPI(w http.ResponseWriter, err error) {
+	var apiErr *api.Error
+	if errors.As(err, &apiErr) {
+		log.Printf("erreur API : %v", err)
+		erreur(w, apiErr.Status, apiErr.Message)
+		return
+	}
+	log.Printf("erreur inattendue : %v", err)
+	erreur(w, http.StatusInternalServerError, "erreur interne")
+}
+
+func pageIntrouvable(w http.ResponseWriter, r *http.Request) {
+	erreur(w, http.StatusNotFound, "Cette page n'existe pas.")
+}
+
+func accueil(w http.ResponseWriter, r *http.Request) {
+	render(w, http.StatusOK, "accueil.html", PageData{Title: "Accueil"})
+}
+
+func listeJeux(w http.ResponseWriter, r *http.Request) {
+	games, err := api.FetchGames()
+	if err != nil {
+		erreurAPI(w, err)
+		return
+	}
+	render(w, http.StatusOK, "jeux.html", PageData{
+		Title: "Les jeux",
+		Query: r.URL.Query().Get("q"), // affiché tel quel : html/template échappe le contenu
+		Games: games,
+	})
+}
+
 func detailJeu(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
-		http.Error(w, "id invalide : un nombre est attendu", http.StatusBadRequest)
+		erreur(w, http.StatusBadRequest, "L'identifiant du jeu doit être un nombre.")
 		return
 	}
-	if id < 1 || id > len(jeux) {
-		http.Error(w, "jeu introuvable", http.StatusNotFound)
+	game, err := api.FetchGame(id)
+	if err != nil {
+		erreurAPI(w, err)
 		return
 	}
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprintf(w, "Jeu n°%d : %s\n", id, jeux[id-1])
+	tournaments, err := api.FetchTournaments(id)
+	if err != nil {
+		erreurAPI(w, err)
+		return
+	}
+	render(w, http.StatusOK, "jeu.html", PageData{
+		Title:       game.Name,
+		Game:        game,
+		Tournaments: tournaments,
+	})
 }

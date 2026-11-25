@@ -1,0 +1,23 @@
+{{template "header.html" .}}
+<h1>{{.Game.Name}}</h1>
+<ul>
+  <li>Année : {{.Game.Year}}</li>
+  <li>Studio : {{.Game.Studio}}</li>
+  <li>Genres : {{range $i, $g := .Game.Genres}}{{if $i}}, {{end}}{{$g}}{{end}}</li>
+</ul>
+
+<h2>Tournois</h2>
+{{if .Tournaments}}
+<table>
+  <thead><tr><th>Nom</th><th>Ville</th><th>Date</th></tr></thead>
+  <tbody>
+    {{range .Tournaments}}
+    <tr><td>{{.Name}}</td><td>{{.City}}</td><td>{{.Date}}</td></tr>
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+<p>Aucun tournoi pour ce jeu.</p>
+{{end}}
+<p><a href="/jeux">← Retour à la liste</a></p>
+{{template "footer.html" .}}
