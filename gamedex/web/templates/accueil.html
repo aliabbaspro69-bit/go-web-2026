@@ -1,0 +1,15 @@
+{{template "header.html" .}}
+<h1>Bienvenue sur GameDex</h1>
+<p>Votre encyclopédie de jeux vidéo.</p>
+<p><a href="/jeux">Voir la liste des jeux</a></p>
+
+<h2>Recherche via l'API (formulaire POST)</h2>
+<form method="POST" action="/recherche">
+  <input type="search" name="q" placeholder="Nom du jeu">
+  <select name="genre">
+    <option value="">Tous les genres</option>
+    {{range .Genres}}<option value="{{.}}">{{.}}</option>{{end}}
+  </select>
+  <button type="submit">Rechercher</button>
+</form>
+{{template "footer.html" .}}

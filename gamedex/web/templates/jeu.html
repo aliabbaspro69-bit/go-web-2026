@@ -1,0 +1,46 @@
+{{template "header.html" .}}
+<h1>{{.Game.Name}}</h1>
+<ul>
+  <li>Année : {{.Game.Year}}</li>
+  <li>Studio : {{.Game.Studio}}</li>
+  <li>Genres : {{range $i, $g := .Game.Genres}}{{if $i}}, {{end}}{{$g}}{{end}}</li>
+</ul>
+
+<h2>Tournois</h2>
+{{if .Tournaments}}
+<table>
+  <thead><tr><th>Nom</th><th>Ville</th><th>Date</th></tr></thead>
+  <tbody>
+    {{range .Tournaments}}
+    <tr><td>{{.Name}}</td><td>{{.City}}</td><td>{{.Date}}</td></tr>
+    {{end}}
+  </tbody>
+</table>
+
+<div id="map"></div>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  // html/template convertit {{.Tournaments}} en JSON sûr dans un <script>.
+  const tournois = {{.Tournaments}};
+
+  const map = L.map('map');
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; contributeurs d\'<a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  }).addTo(map);
+
+  const points = [];
+  tournois.forEach(function (t) {
+    const popup = document.createElement('div');
+    popup.textContent = t.name + ' - ' + t.city + ' (' + t.date + ')';
+    L.marker([t.lat, t.lng]).addTo(map).bindPopup(popup);
+    points.push([t.lat, t.lng]);
+  });
+  map.fitBounds(points, { padding: [30, 30], maxZoom: 6 });
+</script>
+{{else}}
+<p>Aucun tournoi pour ce jeu.</p>
+{{end}}
+<p><a href="/jeux">← Retour à la liste</a></p>
+{{template "footer.html" .}}

@@ -1,4 +1,4 @@
-// Package api contient le client HTTP de la mini API (utilisé par le TP3 et le TP4).
+// Package api est le client HTTP de la mini API. C'est le seul package qui "parle" à l'API.
 package api
 
 import (
@@ -8,41 +8,28 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
+
+	"gamedex/internal/catalog"
 )
 
 const BaseURL = "http://localhost:8081"
 
-// GamesPath est le chemin de la liste des jeux.
-// TP3 question 5 : changez-le en "/api/broken" puis "/api/slow" (ou utilisez le flag -endpoint).
-var GamesPath = "/api/games"
-
 const timeout = 3 * time.Second
 
-// Un client avec timeout : sans lui, un serveur lent bloquerait le programme indéfiniment.
-var client = &http.Client{Timeout: timeout}
-
-// Game correspond au JSON renvoyé par /api/games et /api/games/{id}.
-type Game struct {
-	ID     int      `json:"id"`
-	Name   string   `json:"name"`
-	Year   int      `json:"year"`
-	Studio string   `json:"studio"`
-	Genres []string `json:"genres"`
+// Client appelle la mini API avec un timeout.
+type Client struct {
+	// GamesPath : chemin de la liste des jeux (changez-le pour tester /api/broken ou /api/slow).
+	GamesPath string
+	http      *http.Client
 }
 
-// Tournament correspond au JSON renvoyé par /api/games/{id}/tournaments.
-type Tournament struct {
-	ID     int     `json:"id"`
-	GameID int     `json:"gameId"`
-	Name   string  `json:"name"`
-	City   string  `json:"city"`
-	Date   string  `json:"date"`
-	Lat    float64 `json:"lat"`
-	Lng    float64 `json:"lng"`
+func New() *Client {
+	return &Client{GamesPath: "/api/games", http: &http.Client{Timeout: timeout}}
 }
 
-// Error est une erreur claire, avec le code HTTP que GameDex doit renvoyer à son visiteur.
+// Error est une erreur claire, avec le code HTTP correspondant.
 type Error struct {
 	Status  int
 	Message string
@@ -50,32 +37,44 @@ type Error struct {
 
 func (e *Error) Error() string { return e.Message }
 
-func FetchGames() ([]Game, error) {
-	var games []Game
-	if err := get(GamesPath, &games); err != nil {
+func (c *Client) FetchGames() ([]catalog.Game, error) {
+	var games []catalog.Game
+	if err := c.get(c.GamesPath, &games); err != nil {
 		return nil, err
 	}
 	return games, nil
 }
 
-func FetchGame(id int) (*Game, error) {
-	var g Game
-	if err := get(fmt.Sprintf("/api/games/%d", id), &g); err != nil {
-		return nil, err
-	}
-	return &g, nil
-}
-
-func FetchTournaments(gameID int) ([]Tournament, error) {
-	var ts []Tournament
-	if err := get(fmt.Sprintf("/api/games/%d/tournaments", gameID), &ts); err != nil {
+func (c *Client) FetchTournaments(gameID int) ([]catalog.Tournament, error) {
+	var ts []catalog.Tournament
+	if err := c.get(fmt.Sprintf("/api/games/%d/tournaments", gameID), &ts); err != nil {
 		return nil, err
 	}
 	return ts, nil
 }
 
-func get(path string, out any) error {
-	resp, err := client.Get(BaseURL + path)
+// SearchGames appelle /api/games?q=...&genre=... (bonus : recherche transmise à la mini API).
+func (c *Client) SearchGames(q, genre string) ([]catalog.Game, error) {
+	v := url.Values{}
+	if q != "" {
+		v.Set("q", q)
+	}
+	if genre != "" {
+		v.Set("genre", genre)
+	}
+	path := c.GamesPath
+	if len(v) > 0 {
+		path += "?" + v.Encode()
+	}
+	var games []catalog.Game
+	if err := c.get(path, &games); err != nil {
+		return nil, err
+	}
+	return games, nil
+}
+
+func (c *Client) get(path string, out any) error {
+	resp, err := c.http.Get(BaseURL + path)
 	if err != nil {
 		return networkError(err)
 	}

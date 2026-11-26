@@ -1,0 +1,24 @@
+{{template "header.html" .}}
+<h1>Les jeux</h1>
+
+<form method="GET" action="/jeux">
+  <input type="search" name="q" value="{{.Query}}" placeholder="Nom du jeu">
+  <select name="genre">
+    <option value="">Tous les genres</option>
+    {{range .Genres}}<option value="{{.}}" {{if eq . $.Genre}}selected{{end}}>{{.}}</option>{{end}}
+  </select>
+  <button type="submit">Filtrer</button>
+</form>
+
+{{if .Query}}<p class="recherche">Vous avez cherché : {{.Query}}</p>{{end}}
+
+{{if .Games}}
+<ul>
+  {{range .Games}}
+  <li><a href="/jeux/{{.ID}}">{{.Name}}</a> ({{.Year}})</li>
+  {{end}}
+</ul>
+{{else}}
+<p>Aucun jeu ne correspond à votre recherche.</p>
+{{end}}
+{{template "footer.html" .}}

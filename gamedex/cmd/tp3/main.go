@@ -11,18 +11,20 @@ import (
 )
 
 func main() {
-	endpoint := flag.String("endpoint", api.GamesPath, "chemin de la liste des jeux (ex: /api/broken, /api/slow)")
+	endpoint := flag.String("endpoint", "/api/games", "chemin de la liste des jeux (ex: /api/broken, /api/slow)")
 	flag.Parse()
-	api.GamesPath = *endpoint
 
-	games, err := api.FetchGames()
+	client := api.New()
+	client.GamesPath = *endpoint
+
+	games, err := client.FetchGames()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Erreur :", err)
 		os.Exit(1)
 	}
 
 	for _, g := range games {
-		tournaments, err := api.FetchTournaments(g.ID)
+		tournaments, err := client.FetchTournaments(g.ID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Erreur (tournois du jeu %d) : %v\n", g.ID, err)
 			os.Exit(1)
